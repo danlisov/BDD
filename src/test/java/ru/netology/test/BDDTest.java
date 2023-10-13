@@ -5,45 +5,54 @@ import org.junit.jupiter.api.Test;
 import ru.netology.data.DataHelper;
 import ru.netology.page.DashboardPage;
 import ru.netology.page.LoginPage;
-import ru.netology.page.TransferPage;
-import ru.netology.page.VerificationPage;
 
-import static com.codeborne.selenide.Condition.visible;
-import static com.codeborne.selenide.Selectors.byText;
 import static com.codeborne.selenide.Selenide.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static ru.netology.data.DataHelper.*;
 
 public class BDDTest {
-    private LoginPage loginPage;
-    private DashboardPage dashboardPage;
-    private TransferPage transferPage;
+    DashboardPage dashboardPage;
+    DataHelper.CardInfo firstCardInfo;
+    DataHelper.CardInfo secondCardInfo;
+
     @BeforeEach
-    void setUp() {
-        open("http://localhost:9999");
-        loginPage = new LoginPage();
-        DataHelper.AuthInfo authInfo = DataHelper.getAuthInfo();
-        VerificationPage verificationPage =loginPage.validLogin(authInfo);
-        DataHelper.VerificationCode verificationCode = DataHelper.getVerificationCodeFor(authInfo);
+    void setup(){
+        open("http://localhost:9999/");
+
+        var loginPage = new LoginPage();
+        var authInfo = DataHelper.getAuthInfo();
+        var verificationPage = loginPage.validLogin(authInfo);
+        var verificationCode = DataHelper.getVerificationCodeFor(authInfo);
         dashboardPage = verificationPage.validVerify(verificationCode);
+        firstCardInfo = getFirstCardInfo();
+        secondCardInfo= getSecondCardInfo();
+    }
+    @Test
+    void shouldTransferMoneyBetweenOwnCards(){
+        var firstCardBalance = dashboardPage.getCardBalance(firstCardInfo);
+        var secondCardBalance = dashboardPage.getCardBalance(secondCardInfo);
+        var amount = generateValidAmount(firstCardBalance);
+        var expectedBalanceFirstCard = firstCardBalance - amount;
+        var expectedBalanceSecondCard = secondCardBalance + amount;
+        var transferPage = dashboardPage.selectCardToTransfer(secondCardInfo);
+        dashboardPage = transferPage.makeValidTransfer(String.valueOf(amount),firstCardInfo);
+        var actualBalanceFirstCard = dashboardPage.getCardBalance(firstCardInfo);
+        var actualBalanceSecondCard = dashboardPage.getCardBalance(secondCardInfo);
+        assertEquals(expectedBalanceFirstCard, actualBalanceFirstCard);
+        assertEquals(expectedBalanceSecondCard, actualBalanceSecondCard);
     }
 
     @Test
-    void shouldTransferMoneyBetweenOwnCards() {
-        $("[data-test-id=login] input").setValue("vasya");
-        $("[data-test-id=password] input").setValue("qwerty123");
-        $("[data-test-id=action-login]").click();
-        $(byText("Интернет Банк")).shouldBe(visible);
-
-
-        $("[data-test-id=code] input").setValue("12345");
-        $("[data-test-id=action-verify]").click();
-        $("[data-test-id=dashboard]").shouldBe(visible);
-
-        $$("[data-test-id=action-deposit]").get(0).click();
-        $(byText("Пополнение карты")).shouldBe(visible);
-
-        $("[data-test-id=amount] input").setValue("1000");
-        $$("[data-test-id=from] input").get(0).setValue("5559 0000 0000 0002");
-        $$("[data-test-id=action-transfer]").get(0).click();
-        $("[data-test-id=dashboard]").shouldBe(visible);
+    void shouldGetErrorTransferMoneyBetweenOwnCards(){
+        var firstCardBalance = dashboardPage.getCardBalance(firstCardInfo);
+        var secondCardBalance = dashboardPage.getCardBalance(secondCardInfo);
+        var amount = generateInvalidAmount(secondCardBalance);
+        var transferPage = dashboardPage.selectCardToTransfer(firstCardInfo);
+        transferPage.makeTransfer(String.valueOf(amount), secondCardInfo);
+        transferPage.findErrorMessage("Выполнена попытка перевода суммы, превышающей остаток на карте списания");
+        var actualBalanceFirstCard = dashboardPage.getCardBalance(firstCardInfo);
+        var actualBalanceSecondCard = dashboardPage.getCardBalance(secondCardInfo);
+        assertEquals(firstCardBalance, actualBalanceFirstCard);
+        assertEquals(secondCardBalance, actualBalanceSecondCard);
     }
 }
